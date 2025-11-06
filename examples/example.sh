@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 source ../src/fun.sh
 
 seq 1 4 | sum
