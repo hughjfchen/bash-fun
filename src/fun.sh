@@ -20,181 +20,519 @@ last() {
   command tail -n 1
 }
 
+###############################################
+## List Functions
+###############################################
 list() {
-  for i in "$@"; do
-    echo "$i"
-  done
+    for i in "$@"; do
+        echo "$i"
+    done
 }
 
 unlist() {
-  cat - | xargs
+    xargs
 }
 
-append() {
-  cat -
-  list "$@"
+# Drop the first n items of a list.
+list_drop() {
+    command tail -n +$(($1 + 1))
 }
 
-prepend() {
-  list "$@"
-  cat -
+# Take the first n items of a list.
+list_take() {
+    command head -n "$1"
 }
 
+# Take the 'tail' of a list.
+# Otherwise known as dropping the first element.
+list_tail() {
+    list_drop 1
+}
 
+# Take only the first element of the list.
+list_head() {
+    list_take 1
+}
+
+# Take the last element of the list.
+list_last() {
+    command tail -n 1
+}
+
+# Add the contents of standard input
+# to the end of the list.
+list_append() {
+    cat -
+    list "$@"
+}
+
+# Add the contents of standard input
+# to the beginning of the list.
+list_prepend() {
+    list "$@"
+    cat -
+}
+
+###############################################
+## Lambdas and Lists
+###############################################
+# Defines an anonymous function.
 lambda() {
+    # shellcheck disable=2039
+    local expression
+    lam() {
+        # shellcheck disable=2039
+        local arg
+        while [ $# -gt 0 ]; do
+            arg="$1"
+            shift
+            if [ "$arg" = '.' ]; then
+                echo "$@"
+                return
+            else
+                echo "read $arg;"
+            fi
+        done
+    }
 
-  lam() {
-    local arg
-    while [[ $# -gt 0 ]]; do
-      arg="$1"
-      shift
-      if [[ $arg = '.' ]]; then
-        echo "$@"
-        return
-      else
-        echo "read $arg;"
-      fi
-    done
-  }
-
-  eval $(lam "$@")
-
+    expression=$(lam "$@")
+    eval "$expression"
 }
 
+# Same as lambda.
+# shellcheck disable=2039
 λ() {
-  lambda "$@"
+    lambda "$@"
 }
 
-map() {
-  if [[ $1 != "λ" ]] && [[ $1 != "lambda" ]]; then
+# Print the number of arguments a lambda takes.
+# shellcheck disable=2039
+λ_num_args() {
+    # Calculates the number of arguments a lambda takes
+    minus "$#" 3
+}
 
-    local has_dollar=$(list $@ | grep '\$' | wc -l)
-
-    if [[ $has_dollar -ne 0 ]]; then
-      args=$(echo $@ | sed -e 's/\$/\$a/g')
-      map λ a . $args
-    else
-      map λ a . "$@"' $a'
-    fi
-  else
+# Perform an operation to each
+# element(s) of a list provided
+# through standard input.
+list_map() {
+    # shellcheck disable=2039
     local x
-    while read x; do
-      echo "$x" | "$@"
-    done
-  fi
-}
-
-foldl() {
-  local f="$@"
-  local acc
-  read acc
-  while read elem; do
-    acc="$({ echo $acc; echo $elem; } | $f )"
-  done
-  echo "$acc"
-}
-
-foldr() {
-  local f="$@"
-  local acc
-  local zero
-  read zero
-  foldrr() {
-    local elem
-
-    if read elem; then
-        acc=$(foldrr)
-#        [[ -z $acc ]] && echo $elem && return
-    else
-        echo $zero && return
+    # shellcheck disable=2039
+    local i
+    # shellcheck disable=2039
+    local arguments
+    # shellcheck disable=2039
+    local num_args
+    if [ "$1" = "λ" ] || [ "$1" = "lambda" ]; then
+        num_args=$(λ_num_args "$@")
+        while read -r x; do
+            arguments="$x"
+            i=2
+            while [ $i -le "$num_args" ] ; do
+                read -r x
+                arguments="$arguments $x"
+                i=$(add $i 1)
+            done
+            # We want to word split arguments, so no quotes
+            eval "list $arguments" | "$@"
+        done
+    else # Do not know the arity, assume 1
+        while read -r x; do
+            echo "$x" | "$@"
+        done
     fi
-
-    acc="$({ echo $acc; echo $elem; } | $f )"
-    echo "$acc"
-  }
-
-  foldrr
 }
 
+# Perform a binary operation on a list
+# where one element is the accumulation
+# of the results so far.
+# Ex: seq 3 | foldl lambda a b . 'minus $a $b'
+# First is (1 - 2 = -1) then (-1 - 3 = -4).
+foldl() {
+    # shellcheck disable=2039
+    local acc
+    read -r acc
+    while read -r elem; do
+        acc=$({ echo "$acc"; echo "$elem"; } | "$@" )
+    done
+    echo "$acc"
+}
+
+# Constructs a list where each element
+# is the foldl of the 0th-ith elements of
+# the list.
 scanl() {
-  local f="$@"
-  local acc
-  read acc
-  echo $acc
-  while read elem; do
-    acc="$({ echo $acc; echo $elem; } | $f )"
+    # shellcheck disable=2039
+    local acc
+    read -r acc
     echo "$acc"
-  done
+    while read -r elem; do
+        acc=$({ echo "$acc"; echo "$elem"; } | "$@" )
+        echo "$acc"
+    done
 }
 
-mul() {
-  ( set -f; echo $(($1 * $2)) )
+# Drops any elements of the list where the
+# function performed on it evaluates to false.
+filter() {
+    # shellcheck disable=2039
+    local x
+    while read -r x; do
+        ret=$(echo "$x" | "$@")
+        if_then "$ret" "echo $x"
+    done
 }
 
-plus() {
-  echo $(($1 + $2))
+# Keep taking elements until a certain condition
+# is false.
+take_while() {
+    # shellcheck disable=2039
+    local x
+    # shellcheck disable=2039
+    local condition
+    while read -r x; do
+        condition="$(echo "$x" | "$@")"
+        if_then_else "$condition" "echo $x" "break"
+    done
 }
 
-sub() {
-  echo $(($1 - $2))
+# Keep dropping elements until a certain condition
+# is false.
+drop_while() {
+    # shellcheck disable=2039
+    local x
+    while read -r x; do
+        condition="$(echo "$x" | "$@")"
+        if_then_else "$condition" 'do_nothing' 'break'
+    done
+    if_then "[ -n $x ]" "{ echo $x; cat -; }"
 }
 
-div() {
-  echo $(($1 / $2))
+
+###############################################
+## Arithmetic Functions
+###############################################
+multiply() {
+    # shellcheck disable=2039
+    local a
+    # shellcheck disable=2039
+    local b
+    a=$1
+    if [ $# -lt 2 ] ; then
+        read -r b
+    else
+        b=$2
+    fi
+    isint "$a" > /dev/null && \
+    isint "$b" > /dev/null && \
+    echo $((a * b))
+}
+
+add() {
+    # shellcheck disable=2039
+    local a
+    # shellcheck disable=2039
+    local b
+    a=$1
+    if [ $# -lt 2 ] ; then
+        read -r b
+    else
+        b=$2
+    fi
+    isint "$a" > /dev/null && \
+    isint "$b" > /dev/null && \
+    echo $((a + b))
+}
+
+minus() {
+    # shellcheck disable=2039
+    local a
+    # shellcheck disable=2039
+    local b
+    a=$1
+    if [ $# -lt 2 ] ; then
+        b=$1
+	read -r a
+    else
+        b=$2
+    fi
+    isint "$a" > /dev/null && \
+    isint "$b" > /dev/null && \
+    echo $((a - b))
+}
+
+divide() {
+    # shellcheck disable=2039
+    local a
+    # shellcheck disable=2039
+    local b
+    a=$1
+    if [ $# -lt 2 ] ; then
+        b=$1
+	read -r a
+    else
+        b=$2
+    fi
+    isint "$a" > /dev/null && \
+    isint "$b" > /dev/null && \
+    echo $((a / b))
 }
 
 mod() {
-  echo $(($1 % $2))
+    # shellcheck disable=2039
+    local a
+    # shellcheck disable=2039
+    local b
+    a=$1
+    if [ $# -lt 2 ] ; then
+        b=$1
+	read -r a
+    else
+        b=$2
+    fi
+    isint "$a" > /dev/null && \
+    isint "$b" > /dev/null && \
+    echo $((a % b))
 }
 
+even() {
+    # shellcheck disable=2039
+    local n
+    # shellcheck disable=2039
+    local result
+    # shellcheck disable=2039
+    local result_code
+    if [ $# -lt 1 ] ; then
+        read -r n
+    else
+        n=$1
+    fi
+    result=$(mod "$n" 2)
+    result_code=$?
+    if [ $result_code -ne 0 ] ; then
+        ret false
+    else
+        result_to_bool "[ $result = 0 ]"
+    fi
+}
+
+odd() {
+    not even
+}
+
+less_than() {
+    # shellcheck disable=2039
+    local n
+    read -r n
+    if isint "$n" > /dev/null && \
+       [ "$n" -lt "$1" ] ; then
+        ret true
+    else
+        ret false
+    fi
+}
 
 sum() {
-  foldl lambda a b . 'echo $(($a + $b))'
+    foldl lambda a b . "add \$a \$b"
 }
 
 product() {
-  foldl lambda a b . 'echo $(mul $a $b)'
+    foldl lambda a b . "multiply \$a \$b"
 }
 
 factorial() {
-  seq 1 $1 | product
+    seq 1 "$1" | product
 }
 
+###############################################
+## String Operations
+###############################################
+# Splits a string into a list where each element
+# is one character.
 splitc() {
-  cat - | sed 's/./&\n/g'
+    sed 's/./\n&/g' | list_tail
 }
 
-join() {
-  local delim=$1
-  local pref=$2
-  local suff=$3
-  echo $pref$(cat - | foldl lambda a b . 'echo $a$delim$b')$suff
+# Takes a list and creates a string where
+# each element is seperated by a delimiter.
+list_join() {
+    # shellcheck disable=2039
+    local delim
+    delim=$1
+    foldl lambda a b . "echo \$a$delim\$b"
 }
 
+# Split a string into a list
+# by a specified delimeter
+str_split() {
+    sed "s/$1/\n/g"
+}
+
+# Reverses a list.
 revers() {
-  foldl lambda a b . 'append $b $a'
+    # shellcheck disable=2039
+    local result
+    # shellcheck disable=2039
+    local n
+    while read -r n; do
+        result="$n\n$result"
+    done
+    echo "$result"
 }
 
+# Reverses a string
 revers_str() {
-  cat - | splitc | revers | join
+    splitc | revers | list_join
 }
 
-catch() {
-  local f="$@"
-  local cmd=$(cat -)
-  local val=$(2>&1 eval "$cmd"; echo $?)
-  local cnt=$(list $val | wc -l)
-  local status=$(list $val | last)
-  $f < <(list "$cmd" $status $(list $val | take $((cnt - 1)) | unlist | tup))
+# Removes multiple occurences of
+# a single character from the beginning
+# of the list.
+lstrip() {
+    # shellcheck disable=2039
+    local c
+    if [ $# -eq 0 ] ; then
+        c=" "
+    else
+        c="$1"
+    fi
+    sed "s/^$c*//g"
 }
 
-try() {
-  local f="$@"
-  catch lambda cmd status val . '[[ $status -eq 0 ]] && tupx 1- $val | unlist || { '"$f"' < <(list $status); }'
+# Removes multiple occurences of
+# a single character from the end
+# of the list.
+rstrip() {
+    # shellcheck disable=2039
+    local c
+    if [ $# -eq 0 ] ; then
+        c=" "
+    else
+        c="$1"
+    fi
+    sed "s/$c*$//g"
+}
+
+# Removes multiple occurences of
+# a single character from the beginning
+# and end of the list.
+strip() {
+    lstrip "$@" | rstrip "$@"
+}
+
+###############################################
+## Tuple Functions
+###############################################
+
+# Creates a tuple, which is a string with
+# multiple elements seperated by a comma,
+# and it begins with a ( and ends with a ).
+tup() {
+    # shellcheck disable=2039
+    local args
+    # shellcheck disable=2039
+    local result
+    if [ $# -eq 0 ]; then
+        args=$(unlist)
+        eval "tup $args"
+    else
+        result=$(list "$@" | list_join ,)
+        echo "($result)"
+    fi
+}
+
+# Takes a tuple and outputs it as a list
+tup_to_list() {
+    local li
+    local f
+    local la
+    li=$(str_split ",")
+
+    # Remove '(' from the first element
+    f=$(echo "$li" | list_head)
+    f=$(echo "$f" | sed 's/^(//')
+
+    la=$(echo "$li" | list_last)
+    # If there is only one element in the list
+    # Remove ')' from the only element
+    if [ "$(echo "$la" | cut -c1)" = "(" ]; then
+        f=$(echo "$f" | sed "s/)$//")
+        echo "$f"
+    # If there is more than one element in the list
+    # Remove ')' from the last element
+    else
+        la=$(echo "$la" | sed "s/)$//")
+        # Remove the first and last element from li
+        li=$(echo "$li" | list_tail | sed '$d')
+        # Print the list
+        { echo "$f"; echo "$li"; echo "$la"; }
+    fi
+}
+
+# Takes the first element of the tuple
+tupl() {
+    tup_to_list | list_head
+}
+
+# Takes the last element of the tuple
+tupr() {
+    tup_to_list | list_last
+}
+
+
+# Takes each element from a list in standard
+# input and matches it with a list provided
+# as the argument to this function.
+# The result is a list of 2-tuples.
+list_zip() {
+    # shellcheck disable=2039
+    local l
+    l=$(list "$@")
+    while read -r x; do
+        y=$(echo "$l" | list_take 1)
+        tup "$x" "$y"
+        l=$(echo "$l" | list_drop 1)
+    done
+}
+
+###############################################
+## Logic Based Functions
+###############################################
+
+if_then() {
+    # shellcheck disable=2039
+    local result
+    eval "$1"
+    result=$?
+    if [ $result -eq 0 ] ; then
+        eval "$2"
+    fi
+}
+
+if_then_else() {
+    # shellcheck disable=2039
+    local result
+    eval "$1"
+    result=$?
+    if [ $result -eq 0 ] ; then
+        eval "$2"
+    else
+        eval "$3"
+    fi
+}
+
+result_to_bool() {
+    if_then_else "$1" 'ret true' 'ret false'
+}
+
+not() {
+    if_then_else "$1 > /dev/null" "ret false" "ret true"
 }
 
 ret() {
-  echo $@
+    echo "$@"
+    "$@"
 }
 
 filter() {
@@ -405,39 +743,34 @@ maybevalue() {
 }
 
 
-# commonly used predicates for filter
-# e.g.  list 1 a 2 b 3 c | filter lambda x . 'isint $x'
-
-# inverse another test, e.g. "not isint $x"
-not() {
-  local r=$("$@" 2>/dev/null)
-  $r && ret false || ret true
-}
+###############################################
+## Useful utility functions
+###############################################
 
 isint() {
-  [ "$1" -eq "$1" ] 2>/dev/null && ret true || ret false
+    result_to_bool "echo \"$1\" | grep -Eq '^-?[0-9]+$'"
 }
 
 isempty() {
-  [ -z "$1" ] && ret true || ret false
+    result_to_bool "[ -z \"$1\" ]"
 }
 
 isfile() {
-  [ -f "$1" ] && ret true || ret false
+    result_to_bool "[ -f \"$1\" ]"
 }
 
 isnonzerofile() {
-  [ -s "$1" ] && ret true || ret false
+    result_to_bool "[ -s \"$1\" ]"
 }
 
 isreadable() {
-  [ -r "$1" ] && ret true || ret false
+    result_to_bool "[ -r \"$1\" ]"
 }
 
 iswritable() {
-  [ -w "$1" ] && ret true || ret false
+    result_to_bool "[ -w \"$1\" ]"
 }
 
 isdir() {
-  [ -d "$1" ] && ret true || ret false
+    result_to_bool "[ -d \"$1\" ]"
 }

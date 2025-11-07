@@ -8,16 +8,16 @@ testIsint() {
   assertEquals '1 2 3 4 5' "$(list 1 a 2 b 3 c 4 d 5 e | filter lambda x . 'isint $x' | unlist )"
   assertEquals '1 2'       "$(list 1 a 2 b 3 c 4 d 5 e | filter lambda x . '($(isint $x) &&  [[ $x -le 2 ]] && ret true) || ret false ' | unlist )"
 
-  assertEquals 'false' $(not isint 1)
-  assertEquals 'true' $(not isint a)
+  assertEquals 'false' $(not "isint 1")
+  assertEquals 'true' $(not "isint a")
 }
 
 testIsempty() {
   assertEquals 'true' $(isempty "")
   assertEquals 'false' $(isempty a)
 
-  assertEquals 'true' $(not isempty a)
-  assertEquals 'false' $(not isempty "")
+  assertEquals 'true' $(not "isempty a")
+  assertEquals 'false' $(not "isempty \"\"")
 }
 
 testIsfile() {
@@ -26,7 +26,7 @@ testIsfile() {
   assertEquals 'true' $(isfile $f)
   assertEquals 'false' $(isfile $f.xxx)
   assertEquals 'false' $(isfile "")
-  assertEquals 'true' $(not isfile $f.xxx)
+  assertEquals 'true' $(not "isfile $f.xxx")
 
   assertEquals 'false' $(isnonzerofile $f)
   echo hello world >$f

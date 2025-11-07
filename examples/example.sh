@@ -4,26 +4,26 @@ source ../src/fun.sh
 seq 1 4 | sum
 seq 1 4 | product
 factorial 4
-seq 1 4 | scanl lambda a b . 'echo $(plus $a $b)'
-echo map mul
-seq 1 4 | map lambda a . 'echo $(mul $a 2)'
-echo map sub
-seq 1 4 | map lambda a . 'echo $(sub $a 2)'
-echo map plsu
-seq 1 4 | map lambda a . 'echo $(plus $a 2)'
-echo map div
-seq 1 4 | map lambda a . 'echo $(div $a 2)'
-echo map mod
-seq 1 4 | map lambda a . 'echo $(mod $a 2)'
+seq 1 4 | scanl lambda a b . 'echo $(add $a $b)'
+echo map multiply
+seq 1 4 | list_map lambda a . 'echo $(multiply $a 2)'
+echo map minus
+seq 1 4 | list_map lambda a . 'echo $(minus $a 2)'
+echo map add
+seq 1 4 | list_map lambda a . 'echo $(add $a 2)'
+echo map divide
+seq 1 4 | list_map lambda a . 'echo $(divide $a 2)'
+echo list_map mod
+seq 1 4 | list_map lambda a . 'echo $(mod $a 2)'
 echo 'list & head'
-list 1 2 3 4 5 | lhead
-list {1..2} | append {3..4} | prepend {99..102}
+list 1 2 3 4 5 | list_head
+list {1..2} | list_append {3..4} | list_prepend {99..102}
 list {1..2} | unlist
-list {1..10} | lhead
-list {1..10} | drop 7
-list {1..10} | take 3
-list {1..10} | last
-list {1..10} | map λ a . 'echo $(mul $a 2)'
+list {1..10} | list_head
+list {1..10} | list_drop 7
+list {1..10} | list_take 3
+list {1..10} | list_last
+list {1..10} | list_map λ a . 'echo $(multiply $a 2)'
 
 id() { 
   λ x . '$x' 
@@ -37,77 +37,32 @@ foobar() {
 
 list {1,2,3} | foobar
 
-echo -n abcdefg | revers_str                         # gfedcba
-echo -n abcdefg | splitc | join , '[' ']'            # [a,b,c,d,e,f,g]
-echo -n abcdefg | splitc | revers | join , '[' ']'   # [g,f,e,d,c,b,a]
+echo -n abcdefg | revers_str                # gfedcba
+echo -n abcdefg | splitc | list_join ,           # a,b,c,d,e,f,g
+echo -n abcdefg | splitc | revers | list_join ,  # g,f,e,d,c,b,a
 
-echo -n ' abcdefg' | splitc | foldr lambda a b . 'echo $a$b'  # gfedcba
-
-echo 'ls' | try λ cmd status ret . 'echo $cmd [$status]; echo $ret'
-
-list {1..10} | filter lambda a . '[[ $(mod $a 2) -eq 0 ]] && ret true || ret false' | join , '[' ']'  # [2,4,6,8,10]
-
-function add() {
-    expr $1 + $2
-}
-
-
-curry add3 add 3
-add3 9
+list {1..10} | filter lambda a . '[[ $(mod $a 2) -eq 0 ]] && ret true || ret false' | list_join ,  # 2,4,6,8,10
 
 list a b c d | foldl lambda acc el . 'echo -n $acc-$el'
-list '' a b c d | foldr lambda acc el . 'if [[ ! -z $acc ]]; then echo -n $acc-$el; else echo -n $el; fi'
-
 seq 1 4 | foldl lambda acc el . 'echo $(($acc + $el))'
 
 #1 - 2 - 3 - 4
 seq 1 4 | foldl lambda acc el . 'echo $(($acc - $el))'
-#1 - 4 - 3 - 2
-seq 1 4 | foldr lambda acc el . 'echo $(($acc - $el))'
 
 #1 + (1 + 1) * 2 + (4 + 1) * 3 + (15 + 1) * 4 = 64
-
-seq 1 4 | foldl lambda acc el . 'echo $(mul $(($acc + 1)) $el)'
-
-#1 + (1 + 1) * 4 + (8 + 1) * 3 + (27 + 1) * 2 = 56
-seq 1 4 | foldr lambda acc el . 'echo $(mul $(($acc + 1)) $el)'
+seq 1 4 | foldl lambda acc el . 'echo $(multiply $(($acc + 1)) $el)'
 
 tup a 1
-tupl $(tup a 1)
-tupr $(tup a 1)
 tup a 1 | tupl
 tup a 1 | tupr
 
-seq 1 10 | buff lambda a b . 'echo $(($a + $b))'
-echo 'XX'
-seq 1 10 | buff lambda a b c d e . 'echo $(($a + $b + $c + $d + $e))'
-
-list a b c d e f | lzip $(seq 1 10)
+list a b c d e f | list_zip $(seq 1 10)
 
 echo
-list a b c d e f | lzip $(seq 1 10) | last | tupr
-
-arg='[key1=value1,key2=value2,key3=value3]'
-get() {
-  local pidx=$1
-  local idx=$2
-  local arg=$3
-  echo $arg | tr -d '[]' | cut -d',' -f$idx | cut -d'=' -f$pidx
-}
-
-curry get_key get 1
-curry get_value get 2
-
-get_key 1 $arg
-get_value 1 $arg
-
-seq 1 3 | map lambda a . 'tup $(get_key $a $arg) $(get_value $a $arg)'
-
-echo 'ls /home' | try λ cmd status ret . 'echo $cmd [$status]; echo $ret'
-echo '/home' | try λ cmd status ret . 'echo $cmd [$status]; echo $ret'
+list a b c d e f | list_zip $(seq 1 10) | list_last | tupr
 
 seq 1 5 | scanl lambda a b . 'echo $(($a + $b))'
-seq 1 5 | scanl lambda a b . 'echo $(($a + $b))' | last
+seq 1 5 | scanl lambda a b . 'echo $(($a + $b))' | list_last
 
 seq 2 3 | map lambda a . 'seq 1 $a' | join , [ ]
 list a b c | map lambda a . 'echo $a; echo $a | tr a-z A-z' | join , [ ]
